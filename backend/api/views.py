@@ -263,8 +263,32 @@ from django.middleware.csrf import get_token
 from rest_framework import filters, viewsets, status, filters, generics, permissions
 from rest_framework.views import APIView
 from rest_framework import status
+import json
+from django.views.decorators.csrf import csrf_exempt
+
 
 User = get_user_model()
+
+
+def index(request):
+    tx_ref = request.GET.get('tx_ref')
+    status = request.GET.get('status')
+    transaction_id = request.GET.get('transaction_id')
+
+    if tx_ref and status and transaction_id:
+        new_transaction = Transactions(status=status, tx_ref=tx_ref, transaction_id=transaction_id)
+        new_transaction.save()
+
+    return render(request, "index.html", {
+        'tx_ref': tx_ref,
+        'status': status,
+        'transaction_id': transaction_id
+    })
+
+class TransactionsListView(generics.ListAPIView):
+    queryset = Transactions.objects.all()
+    serializer_class = TransactionsSerializer
+    
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -303,6 +327,33 @@ def get_csrf_token(request):
     csrf_token = get_token(request)
     return JsonResponse({'csrf_token': csrf_token})
 
+class IncrementAccountBalance(APIView):
+    def post(self, request, *args, **kwargs):
+        user = request.user
+        amount = request.data.get('amount')  # Assuming you send the amount to increment
+        if amount:
+            user.increment_account_balance(amount)
+            return Response({'detail': 'Account balance updated successfully'}, status=status.HTTP_200_OK)
+        else:
+            return Response({'detail': 'Amount not provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+class HistoryListCreateView(generics.ListCreateAPIView):
+    queryset = History.objects.all().order_by('-id')  # Order by id in descending order
+    serializer_class = HistorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        return History.objects.filter(user=user).order_by('-id')
+        
+class EditProfileView(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = EditProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user_details(request):
@@ -310,7 +361,7 @@ def get_user_details(request):
     serializer = UserSerializer(user)
     return Response(serializer.data)
 
-class UserListCreateView(generics.ListCreateAPIView):
+class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
@@ -392,6 +443,7 @@ def vtu_api(request):
         print(response.text)
         return Response(response.json())
     
+    
 @api_view(['GET'])  
 def data_plans(request):
     url = "https://quickvtu.ng/api/v1/data-plans?api_key=tHSaFJ1KppsuvLjewhUUbFNzWYyfRg"
@@ -443,7 +495,6 @@ def data_plans(request):
     
     return Response(data)
 
-
 @api_view(['GET'])  
 def sme_plans(request):
     url = "https://quickvtu.ng/api/v1/sme-plans?api_key=tHSaFJ1KppsuvLjewhUUbFNzWYyfRg"
@@ -461,34 +512,32 @@ def sme_plans(request):
     nineMobile_data = []
    
 
-    data = {"mtn": {"mtn_data": mtn_data}, "airtel": {"airtel_data": airtel_data}, 
-            "glo": {"glo_data": glo_data},
-              "nineMobile": {"nineMobile_data": nineMobile_data}}
+    data = {"mtn": {"mtn_data": []}, "airtel": {"airtel_data": []}, 
+            "glo": {"glo_data": []},
+              "nineMobile": {"nineMobile_data": []}}
     
     for plans in coverted_response["data"]["mtn_corporate_data"]:
-        mtn_data.append(plans["service_name"])
+        mtn_data.append({"service_name": plans["service_name"], "service_default_price": plans["service_default_price"]})
     
-    
+    data["mtn"]["mtn_data"] = mtn_data
     
     for plans in coverted_response["data"]["shared_data_airtel"]:
-        airtel_data.append(plans["service_name"])
-
+        airtel_data.append({"service_name": plans["service_name"], "service_default_price": plans["service_default_price"]})
     
+    data["airtel"]["airtel_data"] = airtel_data
     
     for plans in coverted_response["data"]["glo_corporate_data"]:
-        glo_data.append(plans["service_name"])
-
+        glo_data.append({"service_name": plans["service_name"], "service_default_price": plans["service_default_price"]})
     
-
+    data["glo"]["glo_data"] = glo_data
+    
     for plans in coverted_response["data"]["shared_data_9mobile"]:
-        nineMobile_data.append(plans["service_name"])
+        nineMobile_data.append({"service_name": plans["service_name"], "service_default_price": plans["service_default_price"]})
     
-    
-
-    print(response.text)
-
+    data["nineMobile"]["nineMobile_data"] = nineMobile_data
     
     return Response(data)
+
 
 
 @api_view(['POST'])
@@ -666,6 +715,30 @@ def tv_plans(request):
             data.append({"service_name": service_name, "product_code": product_code, "price": price})
 
     return Response(data)
+
+
+
+def flutterwave_webhook(request):
+    if request.method == 'POST':
+        data = request.data  # Use request.data to handle JSON data
+        print(data)
+        transaction_id = data.get('data', {}).get('id')
+        if transaction_id:
+            verify_url = f'https://api.flutterwave.com/v3/transactions/{transaction_id}/verify'
+            headers = {
+                'Authorization': 'Bearer FLWSECK-fab12578d0fa352253f89fd6a7b7b713-18f55ce05d4vt-X',
+                'Content-Type': 'application/json'
+            }
+            verify_response = requests.get(verify_url, headers=headers)
+            if verify_response.status_code == 200:
+                verify_data = verify_response.json()
+                if verify_data['status'] == 'success' and verify_data['data']['status'] == 'successful':
+                    # Handle successful payment, e.g., update your database, send notifications, etc.
+                    return Response({'status': 'success', 'message': 'Payment verified successfully'})
+            return Response({'status': 'error', 'message': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'status': 'error', 'message': 'Invalid request method'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
 
 @api_view(['POST'])
 def buy_tv(request):

@@ -8,6 +8,27 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = '__all__'
 
+
+class HistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = History
+        fields = ['user', 'text']
+
+
+
+class EditProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['username', 'first_name', 'last_name', 'email', 'phone_number']
+
+        
+        first_name = serializers.CharField(required=False)
+        last_name = serializers.CharField(required=False)
+        email = serializers.EmailField(required=False)
+        phone_number = serializers.CharField(required=False)
+        username = serializers.CharField(required=False)
+      
+
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     
@@ -49,6 +70,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             # Print the error and raise the exception again
             print(f"Error creating user: {e}")
             raise e
+        
+class TransactionsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transactions
+        fields = ['transaction_id', 'status', 'tx_ref']
 
 class AirtimeSerializer(serializers.ModelSerializer):
     class Meta:

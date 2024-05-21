@@ -10,13 +10,18 @@ class User(AbstractUser):
     country = models.CharField(max_length=255, blank=True, null=True)
     account_reference = models.CharField(max_length=500, blank=True, null=True)
     account_number = models.IntegerField(blank=True, null=True)
-    account_balance = models.IntegerField(blank=True, null=True)
+    account_balance = models.FloatField(blank=True, null=True, default=0)
+    flutter_secret_key = models.CharField(max_length=200, default="Bearer FLWSECK-fab12578d0fa352253f89fd6a7b7b713-18f55ce05d4vt-X")
+
+    def increment_account_balance(self, amount):
+        self.account_balance = float(amount)
+        self.save()
     
     
 
 
     def __str__(self):
-        return f"{self.username}, Phone number: {self.phone_number}, Verified: {self.is_verified}, account_balance: {self.account_balance} account_reference: {self.account_reference}, account_number: {self.account_number}"
+        return f"{self.username}, Phone number: {self.phone_number}, Verified: {self.is_verified}, account_balance: {self.account_balance} account_reference: {self.account_reference}, account_number: {self.account_number}, secret_key: {self.flutter_secret_key}"
 
 
 class Airtime(models.Model):
@@ -35,5 +40,22 @@ class Airtime(models.Model):
 
     def __str__(self):
         return f"{self.amount} to {self.network} number: {self.phone_number}"
+    
+
+class Transactions(models.Model):
+    tx_ref = models.CharField(max_length=100)
+    transaction_id = models.CharField(max_length=100)
+    status = models.CharField(max_length=100)
+    
+    def __str__(self):
+        return f"status: {self.status}, transaction_id: {self.transaction_id}, tx_ref: {self.tx_ref}"
+
+class History(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    text = models.TextField()
+
+    def __str__(self):
+        return f"{self.user.username}: {self.text}"
+
 
   
